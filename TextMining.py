@@ -1,6 +1,15 @@
 import sys
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy import sparse
+import numpy as np
+from sklearn.metrics import pairwise_distances
+from scipy.spatial.distance import cosine
+import operator
+import matplotlib.pyplot as pyplot
+import seaborn as sns 
+import pandas as pd
+import time
+import pylab
 
 #global variables
 deck = [] #Used to hold all individual cards
@@ -12,12 +21,12 @@ def weedwack(s): #used to trim down strings
 	if (n < 2): return s
 	
 	c = s[n-1]
-	if (',' in c or '.' in c or '?' in c or ':' in c or '!' in c):
-		return j[0:len(j)-1]
-	return j
+	if (',' in c or '.' in c or '?' in c or ':' in c or '!' in c or '\n' in c):
+		return s[0:len(s)-1]
+	return s
 
 def check(s): #used to see if the word described is in stoplist
-	return stoplist.contains(s)
+	return s in stoplist
 
 def stopAdd(s): #adds a word to the stoplist
 	stoplist.append(s)
@@ -67,15 +76,21 @@ class Card:
 	def computeGrams(self): #populates the grams# lists
 		length = len(self.words)
 		for i in range(0, length):
-			self.grams1.append(self.words[i])
-			if i < length-1:
-				self.grams2.append("%s %s" % (self.words[i], self.words[i+1]))
-			if i < length-2:
-				self.grams3.append("%s %s %s" % (self.words[i], self.words[i+1], self.words[i+2]))
-			if i < length-3:
-				self.grams4.append("%s %s %s %s" % (self.words[i], self.words[i+1], self.words[i+2], self.words[i+3]))
-			if i < length-4:
-				self.grams5.append("%s %s %s %s %s" % (self.words[i], self.words[i+1], self.words[i+2], self.words[i+3], self.words[i+4]))
+			#if False == check(self.words[i]):
+			self.grams1 = set(self.words).difference(stoplist)
+			# if False == check(self.words[i]):
+			# 	self.grams1.append(self.words[i])
+			# difference = set
+			# self.grams1.append(self.words[i])
+
+			# if i < length-1:
+			# 	self.grams2.append("%s %s" % (self.words[i], self.words[i+1]))
+			# if i < length-2:
+			# 	self.grams3.append("%s %s %s" % (self.words[i], self.words[i+1], self.words[i+2]))
+			# if i < length-3:
+			# 	self.grams4.append("%s %s %s %s" % (self.words[i], self.words[i+1], self.words[i+2], self.words[i+3]))
+			# if i < length-4:
+			# 	self.grams5.append("%s %s %s %s %s" % (self.words[i], self.words[i+1], self.words[i+2], self.words[i+3], self.words[i+4]))
 		for word in self.grams1:
 			self.uTable[word] = 0
 			if self.table.has_key(word):
@@ -102,6 +117,8 @@ stopRead = open("stopwords.txt", "r")
 newStopWord = stopRead.readline()
 while (newStopWord != None and newStopWord != ""):
 #	print newStopWord
+	newStopWord.strip()
+	newStopWord = weedwack(newStopWord)
 	stopAdd(newStopWord)
 	newStopWord = stopRead.readline()
 
@@ -173,10 +190,7 @@ for i in lines:
 	#sys.stdout.write("\n\n\n")
 
 #-------------------------------------------------
-# print "fuckme"
-# for cards in deck:
-# 	cards.printall()
-# 	print 'fuck'
+
 
 for i in range(0, len(deck)):
 	deck[i].computeGrams()
@@ -185,62 +199,94 @@ for card in deck:
 	card.updateUTable()
 
 
-#create hash tables for all words
+vectorArray = []
+for c in range(0, len(deck)):
+	vectorArray.append([])
 
-#create a universal hash table based on all the keys from all hash tables
-#re calculate every hash table based on the new universal hash table
+keys = []
+keys.extend(card.uTable.keys())
+keys.sort()
 
-# for card in deck:
-# 	card.createUTable(universe)
+for i in keys:
+	for c in range(0, len(deck)):
+		vectorArray[c].append(deck[c].table[i])
 
-#print len(deck)
-#create a list and traverse the list of cards in order
-card1 = deck[0]
-card2 = deck[1]
 
-print set(card1.table.keys()).symmetric_difference(card2.table.keys())
+A =  np.array(vectorArray)
+A_sparse = sparse.csr_matrix(A)
 
-# print "Card 1:"
-key1 = []
-key2 = []
-key1.extend(card1.table.keys())
-key2.extend(card2.table.keys())
-key1.sort()
-key2.sort()
-print key1 == key2
-vector1 = []
-vector2 = []
-
-for i in key2:
-	vector1.append(card1.table[i])
-	vector2.append(card2.table[i])
-
-print vector1
-print vector2
-
-A = np.array(vector1, vector2)
 similarities = cosine_similarity(A_sparse)
-print('pairwise dense output:\n {}\n'.format(similarities))
-
-#print card1.table.keys()
-
-#print "Card 2:"
 
 
-# for i in card2.table.keys():
-# 	print i
+print("\n\n\n")
+
+class Tablet:
+
+	def __init__(self, i, j, diff, title1, title2):
+		self.i = i
+		self.j = j
+		self.diff = diff
+		self.title1 = title1
+		self.title2 = title2
+
+	def __lt__(self, other):
+         return self.diff < other.diff
+
+def printInfo(i, j):
+	sys.stdout.write("<%d, %d> : %s, %s, %s\n" % (i, j, similarities[i][j], deck[i].title, deck[j].title))
+			
+	for key in Card.uTable.keys():
+		if deck[i].table[key] > 0 and deck[j].table[key] > 0 :
+			sys.stdout.write("%s: %s, %s\n" % (key, deck[i].table[key], deck[j].table[key]))
+	sys.stdout.write("\n\n")
+
+Vault = []
+print "second pass"
+for i in range(1, len(similarities)):
+	for j in range (0, i):
+		Vault.append(Tablet(i, j, similarities[i][j], deck[i].title, deck[j].title))
+
+		# if similarities[i][j] > 0.17:
+		# 	printInfo(i, j)
+
+Vault.sort()
+Vault.reverse()
 
 
-#print card2.table.keys()
-# for i in card1.table:
-# 	sys.stdout.write("%s %d\n" % (i, card1.table[i]))
-# quit()
-# print card1.table
-# print card2.table
+def printCard(r, s):
+	print r
+	print s
+	for key in Card.uTable.keys():
+		if deck[r].table[key] > 0 and deck[s].table[key] > 0 :
+			sys.stdout.write("%s: %s, %s\n" % (key, deck[r].table[key], deck[s].table[key]))
+	print '\n\n'
 
+# printInfo(31, 12)
+# printInfo(38, 32)
 
+# for tablet in Vault:
+# 	sys.stdout.write("%d %d %s %s %s\n"%(tablet.i, tablet.j, tablet.diff, len(deck[tablet.i].grams1), len(deck[tablet.j].grams1)))
 
+lenVector = []
+diffVector = []
 
+for tablet in Vault:
+	lenVector.append(abs(len(deck[tablet.i].grams1) - len(deck[tablet.j].grams1)))
+	diffVector.append(tablet.diff)
+
+for i in range(0, len(diffVector)):
+	sys.stdout.write("%f %d\n" % (diffVector[i], lenVector[i]))
+# diffVector = [1, 2, 3, 4, 5, 6]
+# lenVector = [1, 2, 3, 4, 5, 6]
+pyplot.scatter(diffVector, lenVector)
+pylab.show()
+# print diffVector
+# print lenVector
+
+# df = pd.DataFrame()
+# df['x'] = diffVector
+# df['y'] = lenVector
+# print df.head()
 
 
 
